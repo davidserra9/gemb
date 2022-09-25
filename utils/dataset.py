@@ -10,7 +10,49 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
+def get_training_augmentations():
+    """ Function defining and returning the training augmentations.
+    Returns
+    -------
+    train_transform : albumentations.Compose
+        training augmentations
+    """
+    train_transform = [
+        A.GaussNoise(p=0.2),
+        A.OneOf([
+            A.MotionBlur(p=0.2),
+            A.MedianBlur(blur_limit=5, p=0.2),
+            A.Blur(blur_limit=5, p=0.2),
+        ], p=0.2),
+        A.ShiftScaleRotate(shift_limit=0.025, scale_limit=0.1, rotate_limit=10, p=0.3),
+        A.OneOf([
+            A.CLAHE(clip_limit=2),
+            A.RandomBrightnessContrast(),
+        ], p=0.2),
+        A.Normalize(mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]),
+        A.Resize(224, 224),
+        ToTensorV2(),
+    ]
+    return A.Compose(train_transform)
+
+def get_validation_augmentations():
+    """ Function defining and returning the validation/test augmentations.
+        Returns
+        -------
+        val_transforms : albumentations.Compose
+            training augmentations
+    """
+    val_transforms = [
+        A.Normalize(mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]),
+        A.Resize(224, 224),
+        ToTensorV2(),
+    ]
+    return A.Compose(val_transforms)
 
 class TripletGUIE(Dataset):
 
@@ -30,6 +72,7 @@ class TripletGUIE(Dataset):
         self.images = []
         self.labels = []
         self.random_state = np.random.RandomState(29)
+        self.transforms = get_training_augmentations() if train else get_validation_augmentations()
 
         # --- HANDLE PLACES DATASET ---
         if places:
@@ -67,6 +110,10 @@ class TripletGUIE(Dataset):
                     self.labels += [subfolder.split("/")[-1].split("_")[-1]] * (
                             len(sorted(glob(join(subfolder, "*")))) - crossover)
 
+        self.labels2idx = {}
+        for idx, label in enumerate(np.unique(self.labels)):
+            self.labels2idx[label] = idx
+
         self.label2positions = {label: np.where(np.asarray(self.labels) == label)[0]
                                 for label in self.labels}
 
@@ -83,33 +130,33 @@ class TripletGUIE(Dataset):
 
     def __getitem__(self, index):
         if self.train:
-            anchor_image, anchor_label = self.images[index], self.labels[index]
+            anchor_image, anchor_label = self.images[index], self.labels2idx[self.labels[index]]
 
             positive_image = self.images[np.random.choice(self.label2positions[anchor_label])]
             positive_label = anchor_label
-            negative_label = np.random.choice(self.label2positions[np.random.choice(list(set(self.labels) - {anchor_label}))])
-            negative_image = self.images[negative_label]
 
-            anchor_image = Image.open(anchor_image)
-            positive_image = Image.open(positive_image)
-            negative_image = Image.open(negative_image)
+            negative_pos = np.random.choice(self.label2positions[np.random.choice(list(set(self.labels) - {anchor_label}))])
+            negative_image = self.images[negative_pos]
+            negative_label = self.labels2idx[self.labels[negative_pos]]
+
+            anchor_image = self.transforms(Image.open(anchor_image))['image']
+            positive_image = self.transforms(Image.open(positive_image))['image']
+            negative_image = self.transforms(Image.open(negative_image))['image']
 
         else:
-            anchor_label = self.triplets[index][0]
-            anchor_image = Image.open(self.images[anchor_label])
+            anchor_pos = self.triplets[index][0]
+            anchor_image = self.transforms(Image.open(self.images[anchor_pos]))['image']
 
-            positive_label = self.triplets[index][0]
-            positive_image = Image.open(self.images[positive_label])
+            positive_pos = self.triplets[index][0]
+            positive_image = self.transforms(Image.open(self.images[positive_pos]))['image']
 
-            negative_label = self.triplets[index][0]
-            negative_image = Image.open(self.images[negative_label])
-
-        # TODO: training and test tranformations. Use albumentations
+            negative_pos = self.triplets[index][0]
+            negative_image = self.transforms(Image.open(self.images[negative_pos]))['image']
 
         return (anchor_image, positive_image, negative_image), (anchor_label, positive_label, negative_label)
 
     def __len__(self):
-        return self.n_samples  # if you want to subsample for speed
+        return len(self.images)  # if you want to subsample for speed
 
 
 if __name__ == "__main__":
@@ -119,14 +166,3 @@ if __name__ == "__main__":
                           apparel=True)
 
     (img1, img2, img3), (l1, l2, l3) = dataset[0]
-
-    plt.subplot(131)
-    plt.title(l1)
-    plt.imshow(img1)
-    plt.subplot(132)
-    plt.title(l2)
-    plt.imshow(img2)
-    plt.subplot(133)
-    plt.title(l3)
-    plt.imshow(img3)
-    plt.show()
