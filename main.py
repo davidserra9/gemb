@@ -11,7 +11,6 @@ import urllib
 import torch.optim as optim
 from tqdm import tqdm
 
-
 def train_fn(loader, model, optimizer, loss_fn, scaler, device, epoch_num):
     model.train()
     loop = tqdm(loader, desc=f"EPOCH {epoch_num} TRAIN", leave=True)
