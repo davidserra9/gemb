@@ -3,6 +3,7 @@
 [2]: https://www.kaggle.com/datasets/trolukovich/apparel-images-dataset
 """
 import os
+import cv2
 from glob import glob
 from os.path import exists, join
 
@@ -132,28 +133,28 @@ class TripletGUIE(Dataset):
         if self.train:
             anchor_image, anchor_label = self.images[index], self.labels2idx[self.labels[index]]
 
-            positive_image = self.images[np.random.choice(self.label2positions[anchor_label])]
+            positive_image = self.images[np.random.choice(self.label2positions[self.labels[anchor_label]])]
             positive_label = anchor_label
 
             negative_pos = np.random.choice(self.label2positions[np.random.choice(list(set(self.labels) - {anchor_label}))])
             negative_image = self.images[negative_pos]
             negative_label = self.labels2idx[self.labels[negative_pos]]
 
-            anchor_image = self.transforms(Image.open(anchor_image))['image']
-            positive_image = self.transforms(Image.open(positive_image))['image']
-            negative_image = self.transforms(Image.open(negative_image))['image']
+            anchor_image = self.transforms(image=cv2.imread(anchor_image)[:,:,::-1])['image']
+            positive_image = self.transforms(image=cv2.imread(positive_image)[:,:,::-1])['image']
+            negative_image = self.transforms(image=cv2.imread(negative_image)[:,:,::-1])['image']
 
         else:
             anchor_pos = self.triplets[index][0]
-            anchor_image = self.transforms(Image.open(self.images[anchor_pos]))['image']
+            anchor_image = self.transforms(image=cv2.imread(self.images[anchor_pos])[:,:,::-1])['image']
             anchor_label = self.labels2idx[self.labels[anchor_pos]]
 
             positive_pos = self.triplets[index][0]
-            positive_image = self.transforms(Image.open(self.images[positive_pos]))['image']
+            positive_image = self.transforms(image=cv2.imread(self.images[positive_pos])[:,:,::-1])['image']
             positive_label = self.labels2idx[self.labels[positive_pos]]
 
             negative_pos = self.triplets[index][0]
-            negative_image = self.transforms(Image.open(self.images[negative_pos]))['image']
+            negative_image = self.transforms(image=cv2.imread(self.images[negative_pos])[:,:,::-1])['image']
             negative_label = self.labels2idx[self.labels[negative_pos]]
 
         return (anchor_image, positive_image, negative_image), (anchor_label, positive_label, negative_label)
@@ -165,7 +166,7 @@ class TripletGUIE(Dataset):
 if __name__ == "__main__":
     dataset = TripletGUIE(root="/home/david/Workspace/gemb/data",
                           train=True,
-                          places=True,
+                          places=False,
                           apparel=True)
 
     (img1, img2, img3), (l1, l2, l3) = dataset[0]
