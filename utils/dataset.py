@@ -146,12 +146,15 @@ class TripletGUIE(Dataset):
         else:
             anchor_pos = self.triplets[index][0]
             anchor_image = self.transforms(Image.open(self.images[anchor_pos]))['image']
+            anchor_label = self.labels2idx[self.labels[anchor_pos]]
 
             positive_pos = self.triplets[index][0]
             positive_image = self.transforms(Image.open(self.images[positive_pos]))['image']
+            positive_label = self.labels2idx[self.labels[positive_pos]]
 
             negative_pos = self.triplets[index][0]
             negative_image = self.transforms(Image.open(self.images[negative_pos]))['image']
+            negative_label = self.labels2idx[self.labels[negative_pos]]
 
         return (anchor_image, positive_image, negative_image), (anchor_label, positive_label, negative_label)
 
