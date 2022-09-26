@@ -57,7 +57,7 @@ def get_validation_augmentations():
 
 class TripletGUIE(Dataset):
 
-    def __init__(self, root, train, places, apparel):
+    def __init__(self, root, train, datasets): # Joan: I implemented a more general approach to add new datasets (a list with dataset names)
         """ Dataset for the Google Universal Image Embedding
 
         Parameters
@@ -76,7 +76,7 @@ class TripletGUIE(Dataset):
         self.transforms = get_training_augmentations() if train else get_validation_augmentations()
 
         # --- HANDLE PLACES DATASET ---
-        if places:
+        if 'places' in datasets:
             # Download the dataset if not is already downloaded
             if not exists(join(self.root, "places2-mit-dataset")):
                 os.system(f"bash /utils/download_placesdataset.sh {self.root}")
@@ -95,7 +95,7 @@ class TripletGUIE(Dataset):
                                 len(sorted(glob(join(subsubfolder, "*")))) - crossover)
 
         # --- HANDLE APPAREL DATASET ---
-        if apparel:
+        if 'apparel' in datasets:
             # Download the dataset if not is already downloaded
             if not exists(join(self.root, "apparel-images-dataset")):
                 os.system(f"bash /utils/download_appareldataset.sh {self.root}")
@@ -156,6 +156,8 @@ class TripletGUIE(Dataset):
             negative_pos = self.triplets[index][0]
             negative_image = self.transforms(image=cv2.imread(self.images[negative_pos])[:,:,::-1])['image']
             negative_label = self.labels2idx[self.labels[negative_pos]]
+
+        # Joan: Perform here the transform
 
         return (anchor_image, positive_image, negative_image), (anchor_label, positive_label, negative_label)
 

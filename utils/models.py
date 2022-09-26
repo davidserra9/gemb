@@ -7,11 +7,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from utils.dataset import TripletGUIE, get_validation_augmentations
 
-class CLIP_MLP(nn.Module):
+
+class Shared_CLIP_MLP(nn.Module):
     def __init__(self, clip_model='ViT-g-14', pretrained='laion2b_s12b_b42k'):
         super().__init__()
-        self.size = 224
-        self.backbone_clip, _, preprocess = open_clip.create_model_and_transforms(model_name=clip_model,
+
+        self.backbone_clip, _, _ = open_clip.create_model_and_transforms(model_name=clip_model,
                                                                                   pretrained=pretrained)
         for param in self.backbone_clip.parameters():
             param.requires_grad = False
@@ -23,20 +24,22 @@ class CLIP_MLP(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 64)
         )
+
     def forward(self, img):
-
-        x = T.functional.resize(img, size=[self.size, self.size])
-        x = x / 255.0
-        x = T.functional.normalize(x,
-                                   mean=[0.48145466, 0.4578275, 0.40821073],
-                                   std=[0.26862954, 0.26130258, 0.27577711])
-
-        x = self.backbone_clip.encode_image(x)
+        x = self.backbone_clip.encode_image(img)
         x = self.mlp(x)
         return x
 
+class Triplet_CLIP_MLP(nn.Module):
+    def __init__(self, clip_model='ViT-g-14', pretrained='laion2b_s12b_b42k'):
+        super().__init__()
+        self.shared_embedding = Shared_CLIP_MLP(clip_model=clip_model, pretrained=pretrained)
+
+    def forward(self, anchor, positive, negative):
+        return self.shared_embedding(anchor), self.shared_embedding(positive), self.shared_embedding(negative)
+
 if __name__ == "__main__":
-    model = CLIP_MLP(clip_model='ViT-B-32', pretrained='openai')
+    model = Triplet_CLIP_MLP(clip_model='ViT-B-32', pretrained='openai')
     dataset = TripletGUIE(root="/home/david/Workspace/gemb/data",
                           train=True,
                           places=False,
