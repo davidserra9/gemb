@@ -8,8 +8,79 @@ from PIL import Image
 from torchvision import transforms as T
 from torchvision import models
 import urllib
+from torch.optim import lr_scheduler
 import torch.optim as optim
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+from utils.parser import load_yml
+from utils.models import CLIP_MLP
+from utils.dataset import TripletGUIE
+from utils.losses import TripletLoss
+
+def main():
+
+    cfg = load_yml("config.yml")
+
+    print(f"PyTorch Version: {torch.__version__}")
+    print(f"Torchvision: {torchvision.__version__}")
+    print(f"Device: {cfg.device}")
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
+
+    # model = CLIP_MLP()
+    model = CLIP_MLP(clip_model='ViT-B-32', pretrained='openai')
+
+    train_dataset = TripletGUIE(root=cfg.dataset_root,
+                                train=True,
+                                places=False,
+                                apparel=True)
+
+    test_dataset = TripletGUIE(root=cfg.dataset_root,
+                               train=False,
+                               places=False,
+                               apparel=True)
+
+    train_loader = DataLoader(train_dataset,
+                              batch_size=cfg.batch_size,
+                              shuffle=True,
+                              num_workers=4)
+
+    test_loader = DataLoader(test_dataset,
+                             batch_size=cfg.batch_size,
+                             shuffle=True,
+                             num_workers=4)
+
+    criterion = TripletLoss(margin=1.)
+    opt = optim.Adam(model.parameters(), lr=cfg.learning_rate)
+    scheduler = lr_scheduler.StepLR(opt, 8, gamma=0.1, last_epoch=-1)
+
+    triplet_train_fn(loader=train_loader, model=model, loss_fn=criterion, optimizer=opt, device=cfg.device, epoch_num=0)
+def triplet_train_fn(loader, model, loss_fn, optimizer, device, epoch_num):
+
+    model.train()
+    model.to(device)
+    loop = tqdm(loader, desc=f"EPOCH {epoch_num} TRAIN", leave=True)
+
+    total_loss = 0
+    for idx, (data, target) in enumerate(loop):
+        data = tuple(d.to(device) for d in data)
+
+        optimizer.zero_grad()
+        outputs = model(*data)
+
+        outputs = (outputs,) if type(outputs) not in (tuple, list) else outputs
+
+        loss = loss_fn(*outputs)
+        loss = loss[0] if type(loss) in (tuple, list) else loss
+        total_loss += loss.item()
+        loss.backward()
+        optimizer.step()
+
+        loop.set_postfix(loss=total_loss / (idx+1))
+
+    return total_loss / len(loader)
+
+if __name__ == "__main__":
+    main()
 
 # def train_fn(loader, model, optimizer, loss_fn, scaler, device, epoch_num):
 #     model.train()
@@ -179,3 +250,4 @@ from tqdm import tqdm
 #             saved_model = torch.jit.script(model_to_save)
 #             saved_model.save("saved_model.pt")
 #             print(f"Model saved at epoch {idx} with acc {acc}")
+
