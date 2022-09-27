@@ -20,15 +20,13 @@ def fit(train_loader, test_loader, model, loss_fn, optimizer, scheduler, config,
         scheduler.step()
 
         # Train stage
-        # train_loss, metrics = train_epoch(train_loader, model, loss_fn, optimizer, device, epoch)
-        #
+        train_loss, metrics = train_epoch(train_loader, model, loss_fn, optimizer, device, epoch)
+
         # print('Epoch: {}/{}. Train set: Average loss: {:.4f}'.format(epoch + 1, n_epochs, train_loss))
 
-        val_loss, metrics = test_epoch(test_loader, model, loss_fn, device, epoch)
-        val_loss /= len(test_loader)
+        map5 = test_epoch(test_loader, model, device, epoch)
 
-        print('Epoch: {}/{}. Validation set: Average loss: {:.4f}'.format(epoch + 1, n_epochs,val_loss))
-    
+        #print('Epoch: {}/{}. Validation set: Average loss: {:.4f}'.format(epoch + 1, n_epochs,val_loss))
 
         state_dict = {
             'epoch': epoch+1,
@@ -36,11 +34,11 @@ def fit(train_loader, test_loader, model, loss_fn, optimizer, scheduler, config,
             'optimizer': optimizer.state_dict(),
             'scheduler': scheduler.state_dict(),
             'metrics': {metric.name(): metric.value() for metric in metrics},
-            'val_loss': val_loss,
+            'map5': map5,
             'train_loss': train_loss,
         }
 
-        wandb.log({"train_loss": train_loss, "val_loss": val_loss})
+        wandb.log({"train_loss": train_loss, "map5": map5})
 
         PATH = 'models/' + model_id + '.pth'
         torch.save(state_dict, PATH)
@@ -65,66 +63,45 @@ def train_epoch(train_loader, model, loss_fn, optimizer, device, epoch_num):
 
         log = {}
 
-        if idx % 10 == 0:
-            print(epoch_num, idx, f'loss - {loss.item()}')
-
-            log = {
-                **log,
-                'epoch': epoch_num,
-                'iter': idx,
-                'train_loss': loss.item()
-            }
-            wandb.log(log)
+        # if idx % 10 == 0:
+        #     print(epoch_num, idx, f'loss - {loss.item()}')
+        #
+        #     log = {
+        #         **log,
+        #         'epoch': epoch_num,
+        #         'iter': idx,
+        #         'train_loss': loss.item()
+        #     }
+        #     wandb.log(log)
         loop.set_postfix(loss=total_loss / (idx+1))
 
     metrics = {}  
     return total_loss, metrics
 
 
-class FaissKNNImpl:
+class FaissKNeighbors:
+    def __init__(self, k=5):
+        self.index = None
+        self.y = None
+        self.k = k
 
-    def __init__(self, k, faiss):
-        self.k = k  # k nearest neighbor value
-        self.faissIns = faiss  # FAISS instance
-        self.index = 0
-        self.gpu_index_flat = 0
-        self.train_labels = []
-        self.test_label_faiss_output = []
+    def fit(self, X, y):
+        self.index = faiss.IndexFlatL2(X.shape[1])
+        self.index.add(X.astype(np.float32))
+        self.y = y
 
-    def fitModel(self, train_features, train_labels):
-        self.train_labels = train_labels
-        self.index = self.faissIns.IndexFlatL2(train_features.shape[1])  # build the index
-        self.index.add(train_features)  # add vectors to the index
+    def predict(self, X):
+        distances, indices = self.index.search(X.astype(np.float32), k=(self.k + 1))
+        self.predictions = self.y[indices][:, 1:] # Discard the sample itself
+        # predictions = np.array([np.argmax(np.bincount(x)) for x in votes])
+        return self.predictions
 
-    def fitModel_GPU(self, train_features, train_labels):
-        no_of_gpus = self.faissIns.get_num_gpus()
-        self.train_labels = train_labels
-        self.gpu_index_flat = self.index = self.faissIns.IndexFlatL2(train_features.shape[1])  # build the index
-        if no_of_gpus > 0:
-            self.gpu_index_flat = self.faissIns.index_cpu_to_all_gpus(self.index)
+    def mapk(self):
+        # TODO could be faster if it was implemented entirely with numpy
+        map = [np.count_nonzero(self.predictions[idx, :] == l) for idx, l in enumerate(self.y)]
+        return sum(map) / (len(map) * self.k)
 
-        self.gpu_index_flat.add(train_features)  # add vectors to the index
-        return no_of_gpus
-
-    def predict(self, test_features):
-        distance, test_features_faiss_Index = self.index.search(test_features, self.k)
-        self.test_label_faiss_output = stats.mode(self.train_labels[test_features_faiss_Index], axis=1)[0]
-        self.test_label_faiss_output = np.array(self.test_label_faiss_output.ravel())
-        # for test_index in range(0,test_features.shape[0]):
-        #    self.test_label_faiss_output[test_index] = stats.mode(self.train_labels[test_features_faiss_Index[test_index]])[0][0] #Counter(self.train_labels[test_features_faiss_Index[test_index]]).most_common(1)[0][0]
-        return self.test_label_faiss_output
-
-    def predict_GPU(self, test_features):
-        distance, test_features_faiss_Index = self.gpu_index_flat.search(test_features, self.k)
-        self.test_label_faiss_output = stats.mode(self.train_labels[test_features_faiss_Index], axis=1)[0]
-        self.test_label_faiss_output = np.array(self.test_label_faiss_output.ravel())
-        return self.test_label_faiss_output
-
-    def getAccuracy(self, test_labels):
-        accuracy = (self.test_label_faiss_output == test_labels).mean()
-        return round(accuracy, 2)
-
-def test_epoch(loader, model, loss_fn, device, epoch_num):
+def test_epoch(loader, model, device, epoch_num):
 
     model.to(device)
 
@@ -141,15 +118,8 @@ def test_epoch(loader, model, loss_fn, device, epoch_num):
             test_embeddings = np.vstack((test_embeddings, outputs.cpu().detach().numpy()))
             test_labels = np.concatenate((test_labels, target.numpy()))
 
-            if idx == 3:
-                break
-
-    index = faiss.IndexFlatL2(64)
-
-    KNN = FaissKNNImpl(k=5, faiss=index)
-    n = KNN.fitModel_GPU(train_features=test_embeddings, train_labels=test_labels)
-    print(n)
-    n = KNN.predict(test_features=test_embeddings)
-    print(n)
-
-    print("all embeddings computed")
+    KNN = FaissKNeighbors(k=5)
+    KNN.fit(X=test_embeddings, y=test_labels)
+    KNN.predict(X=test_embeddings)
+    map = KNN.mapk()
+    print(f"map@5: {map}")

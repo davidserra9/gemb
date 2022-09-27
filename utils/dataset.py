@@ -13,6 +13,7 @@ from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from prettytable import PrettyTable
 
 def get_training_augmentations():
     """ Function defining and returning the training augmentations.
@@ -139,6 +140,11 @@ class TripletGUIE(Dataset):
 
         self.label2positions = {label: np.where(np.asarray(self.labels) == label)[0]
                                 for label in self.labels}
+
+        pt = PrettyTable()
+        pt.field_names = ['', 'images', 'labels']
+        pt.add_row([f"{'train' if train else 'test'} dataset", len(self.images), len(self.labels2idx)])
+        print(pt)
 
         # if not self.train:
         #     self.triplets = [[i,

@@ -10,16 +10,17 @@ from utils.models import Triplet_CLIP_MLP
 from utils.dataset import TripletGUIE
 from utils.losses import TripletLoss
 from utils.train import fit
+from prettytable import PrettyTable
 import wandb
 
 def main():
 
     cfg = load_yml("config.yml")
 
-    print(f"PyTorch Version: {torch.__version__}")
-    print(f"Torchvision: {torchvision.__version__}")
-    print(f"Device: {cfg.device}")
-    print(f"GPU: {torch.cuda.get_device_name(0)}")
+    pt = PrettyTable()
+    pt.field_names = ["Pytorch", "Torchvision", "Device", "GPU"]
+    pt.add_row([torch.__version__, torchvision.__version__, cfg.device, torch.cuda.get_device_name(0)])
+    print(pt)
 
     # Output directory
     OUTPUT_MODEL_DIR = './models/'
@@ -73,12 +74,12 @@ def main():
     wandb.init(
             project=cfg.project_name,
             entity=cfg.wandb_entity,
-            name = cfg.model_id,
+            name=cfg.model_id,
             resume=False,
             config=cfg,
         )
 
-    fit(train_loader=train_loader, test_loader = test_loader, model=model, loss_fn=criterion, optimizer=opt, scheduler = scheduler, config=cfg, start_epoch=0)
+    fit(train_loader=train_loader, test_loader=test_loader, model=model, loss_fn=criterion, optimizer=opt, scheduler=scheduler, config=cfg, start_epoch=0)
 
 if __name__ == "__main__":
     main()
