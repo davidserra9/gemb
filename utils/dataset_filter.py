@@ -1,0 +1,3 @@
+apparel_labels = [
+
+]

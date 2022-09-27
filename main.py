@@ -33,14 +33,15 @@ def main():
     model.to(device)
 
     train_datasets = cfg.train_datasets
+    test_datasets = cfg.test_datasets
 
     train_dataset = TripletGUIE(root=cfg.dataset_root,
                                 train=True,
-                                datasets = train_datasets)
+                                datasets=train_datasets)
 
     test_dataset = TripletGUIE(root=cfg.dataset_root,
                                train=False,
-                               datasets = train_datasets)
+                               datasets=test_datasets)
 
     train_loader = DataLoader(train_dataset,
                               batch_size=cfg.batch_size,

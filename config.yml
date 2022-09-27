@@ -1,9 +1,10 @@
-dataset_root: "/mnt/colab_public/datasets/joan/gemb"
+dataset_root: "/media/david/emb"
 batch_size: 12
 learning_rate: 0.001
 n_epochs: 1000
-train_datasets : ['apparel']
+train_datasets: ['apparel']
+test_datasets: ['objectnet']
 num_workers: 4
-project_name: gemb_triplet_openCLIP
+project_name: GUIE
 model_id: openCLIP+MLP
-wandb_entity: joanrod
+wandb_entity: celulaeucariota

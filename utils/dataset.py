@@ -6,7 +6,7 @@ import os
 import cv2
 from glob import glob
 from os.path import exists, join
-
+from subprocess import run, PIPE
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
@@ -74,12 +74,16 @@ class TripletGUIE(Dataset):
         self.labels = []
         self.random_state = np.random.RandomState(29)
         self.transforms = get_training_augmentations() if train else get_validation_augmentations()
+        self.code_path = os.getcwd()
 
         # --- HANDLE PLACES DATASET ---
         if 'places' in datasets:
             # Download the dataset if not is already downloaded
             if not exists(join(self.root, "places2-mit-dataset")):
-                os.system(f"bash /utils/download_placesdataset.sh {self.root}")
+                print("Downloading places2-mit-dataset...")
+                # log = subprocess.check_call("./utils/download_placesdataset.sh '%s'" % {self.root}, shell=True)
+
+                #subprocess.run(f"bash /utils/download_placesdataset.sh {self.root}")
 
             for subfolder in sorted(
                     glob(join(self.root, "places2-mit-dataset", "train_256_places365standard", "data_256", "*"))):
@@ -98,7 +102,10 @@ class TripletGUIE(Dataset):
         if 'apparel' in datasets:
             # Download the dataset if not is already downloaded
             if not exists(join(self.root, "apparel-images-dataset")):
-                os.system(f"bash /utils/download_appareldataset.sh {self.root}")
+                # run(["bash", f"{join(self.code_path, 'utils', 'download_appareldataset.sh')}", self.root], stdout=PIPE, stderr=PIPE )
+                os.system(f"bash {join(self.code_path, 'utils', 'download_appareldataset.sh')} {self.root}")
+            else:
+                print(f"apparel-images-dataset already downloaded")
 
             for subfolder in sorted(glob(join(self.root, "apparel-images-dataset", "*"))):
                 crossover = int(0.8 * len(sorted(glob(join(subfolder, "*")))))
@@ -111,6 +118,21 @@ class TripletGUIE(Dataset):
                     self.labels += [subfolder.split("/")[-1].split("_")[-1]] * (
                             len(sorted(glob(join(subfolder, "*")))) - crossover)
 
+        # --- HANDLE OBJECTNET DATASET ---
+        # REMINDER: train has to be false as ObjectNet dataset cannot be used for training purposes bc of its licence.
+        if not train and 'objectnet' in datasets:
+            if not exists(join(self.root, "objectnet")):
+                os.makedirs(join(self.root, "objectnet"), exist_ok=True)
+                os.system(f"bash {join(self.code_path, 'utils', 'download_objectnet.sh')} {join(self.root, 'objectnet')}")
+
+            else:
+                print(f"objectnet dataset already downloaded")
+
+            for split_folder in sorted(glob(join(self.root, "objectnet", "*"))):
+                for class_folder in sorted(glob(join(split_folder, "*", "images", "*"))):
+                    self.images += sorted(glob(join(class_folder, "*")))
+                    self.labels += [class_folder.split("/")[-1]] * len(glob(join(class_folder, "*")))
+
         self.labels2idx = {}
         for idx, label in enumerate(np.unique(self.labels)):
             self.labels2idx[label] = idx
@@ -118,16 +140,16 @@ class TripletGUIE(Dataset):
         self.label2positions = {label: np.where(np.asarray(self.labels) == label)[0]
                                 for label in self.labels}
 
-        if not self.train:
-            self.triplets = [[i,
-                              self.random_state.choice(self.label2positions[self.labels[i]]),
-                              self.random_state.choice(self.label2positions[
-                                                           np.random.choice(
-                                                               list(set(self.labels) - {self.labels[i]})
-                                                           )
-                                                       ])
-                              ]
-                             for i in range(len(self.images))]
+        # if not self.train:
+        #     self.triplets = [[i,
+        #                       self.random_state.choice(self.label2positions[self.labels[i]]),
+        #                       self.random_state.choice(self.label2positions[
+        #                                                    np.random.choice(
+        #                                                        list(set(self.labels) - {self.labels[i]})
+        #                                                    )
+        #                                                ])
+        #                       ]
+        #                      for i in range(len(self.images))]
 
     def __getitem__(self, index):
         if self.train:
@@ -144,22 +166,26 @@ class TripletGUIE(Dataset):
             positive_image = self.transforms(image=cv2.imread(positive_image)[:,:,::-1])['image']
             negative_image = self.transforms(image=cv2.imread(negative_image)[:,:,::-1])['image']
 
+            return (anchor_image, positive_image, negative_image), (anchor_label, positive_label, negative_label)
+
         else:
-            anchor_pos = self.triplets[index][0]
-            anchor_image = self.transforms(image=cv2.imread(self.images[anchor_pos])[:,:,::-1])['image']
-            anchor_label = self.labels2idx[self.labels[anchor_pos]]
+            # anchor_pos = self.triplets[index][0]
+            # anchor_image = self.transforms(image=cv2.imread(self.images[anchor_pos])[:,:,::-1])['image']
+            # anchor_label = self.labels2idx[self.labels[anchor_pos]]
+            #
+            # positive_pos = self.triplets[index][0]
+            # positive_image = self.transforms(image=cv2.imread(self.images[positive_pos])[:,:,::-1])['image']
+            # positive_label = self.labels2idx[self.labels[positive_pos]]
+            #
+            # negative_pos = self.triplets[index][0]
+            # negative_image = self.transforms(image=cv2.imread(self.images[negative_pos])[:,:,::-1])['image']
+            # negative_label = self.labels2idx[self.labels[negative_pos]]
 
-            positive_pos = self.triplets[index][0]
-            positive_image = self.transforms(image=cv2.imread(self.images[positive_pos])[:,:,::-1])['image']
-            positive_label = self.labels2idx[self.labels[positive_pos]]
+            image = self.transforms(image=cv2.imread(self.images[index])[:, :, ::-1])['image']
+            label = self.labels2idx[self.labels[index]]
+            return image, label
 
-            negative_pos = self.triplets[index][0]
-            negative_image = self.transforms(image=cv2.imread(self.images[negative_pos])[:,:,::-1])['image']
-            negative_label = self.labels2idx[self.labels[negative_pos]]
-
-        # Joan: Perform here the transform
-
-        return (anchor_image, positive_image, negative_image), (anchor_label, positive_label, negative_label)
+        # Joan: TODO:Perform here the transform
 
     def __len__(self):
         return len(self.images)  # if you want to subsample for speed

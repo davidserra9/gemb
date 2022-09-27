@@ -38,6 +38,9 @@ class Triplet_CLIP_MLP(nn.Module):
     def forward(self, anchor, positive, negative):
         return self.shared_embedding(anchor), self.shared_embedding(positive), self.shared_embedding(negative)
 
+    def embedding(self, img):
+        return self.shared_embedding(img)
+
 if __name__ == "__main__":
     model = Triplet_CLIP_MLP(clip_model='ViT-B-32', pretrained='openai')
     dataset = TripletGUIE(root="/home/david/Workspace/gemb/data",
