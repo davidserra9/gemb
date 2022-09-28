@@ -1,5 +1,5 @@
 # WIP - PLACES2
-places = [
+places_filter = [
     "airplane_cabin",
     "alcove",
     "alley",

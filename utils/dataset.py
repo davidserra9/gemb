@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from prettytable import PrettyTable
+from utils.dataset_filter import *
 
 def get_training_augmentations():
     """ Function defining and returning the training augmentations.
@@ -83,21 +84,14 @@ class TripletGUIE(Dataset):
             if not exists(join(self.root, "places2-mit-dataset")):
                 print("Downloading places2-mit-dataset...")
                 # log = subprocess.check_call("./utils/download_placesdataset.sh '%s'" % {self.root}, shell=True)
-
+                os.system(f"bash {join(self.code_path, 'utils', 'download_placesdataset.sh')} {self.root}")
                 #subprocess.run(f"bash /utils/download_placesdataset.sh {self.root}")
 
             for subfolder in sorted(
                     glob(join(self.root, "places2-mit-dataset", "train_256_places365standard", "data_256", "*"))):
                 for subsubfolder in sorted(glob(join(subfolder, "*"))):
-                    crossover = int(0.8 * len(sorted(glob(join(subfolder, "*")))))
-                    if train:
-                        self.images += sorted(glob(join(subsubfolder, "*")))[:crossover]
-                        self.labels += [subsubfolder.split("/")[-1]] * crossover
-
-                    else:
-                        self.images += sorted(glob(join(subsubfolder, "*")))[crossover:]
-                        self.labels += [subsubfolder.split("/")[-1]] * (
-                                len(sorted(glob(join(subsubfolder, "*")))) - crossover)
+                    self.images += sorted(glob(join(subsubfolder, "*")))
+                    self.labels += [subsubfolder.split("/")[-1]]
 
         # --- HANDLE APPAREL DATASET ---
         if 'apparel' in datasets:
@@ -109,15 +103,8 @@ class TripletGUIE(Dataset):
                 print(f"apparel-images-dataset already downloaded")
 
             for subfolder in sorted(glob(join(self.root, "apparel-images-dataset", "*"))):
-                crossover = int(0.8 * len(sorted(glob(join(subfolder, "*")))))
-                if train:
-                    self.images += sorted(glob(join(subfolder, "*")))[:crossover]
-                    self.labels += [subfolder.split("/")[-1].split("_")[-1]] * crossover
-
-                else:
-                    self.images += sorted(glob(join(subfolder, "*")))[crossover:]
-                    self.labels += [subfolder.split("/")[-1].split("_")[-1]] * (
-                            len(sorted(glob(join(subfolder, "*")))) - crossover)
+                self.images += sorted(glob(join(subfolder, "*")))
+                self.labels += [subfolder.split("/")[-1].split("_")[-1]]
 
         # --- HANDLE OBJECTNET DATASET ---
         # REMINDER: train has to be false as ObjectNet dataset cannot be used for training purposes bc of its licence.

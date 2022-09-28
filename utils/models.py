@@ -13,7 +13,7 @@ class Shared_CLIP_MLP(nn.Module):
         super().__init__()
 
         self.backbone_clip, _, _ = open_clip.create_model_and_transforms(model_name=clip_model,
-                                                                                  pretrained=pretrained)
+                                                                         pretrained=pretrained)
         for param in self.backbone_clip.parameters():
             param.requires_grad = False
 
