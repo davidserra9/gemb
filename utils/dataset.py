@@ -74,37 +74,38 @@ class TripletGUIE(Dataset):
         self.train = train
         self.images = []
         self.labels = []
+        self.label2positions = {}
         self.random_state = np.random.RandomState(29)
         self.transforms = get_training_augmentations() if train else get_validation_augmentations()
         self.code_path = os.getcwd()
 
+        id = 0
         # --- HANDLE PLACES DATASET ---
         if 'places' in datasets:
             # Download the dataset if not is already downloaded
             if not exists(join(self.root, "places2-mit-dataset")):
-                print("Downloading places2-mit-dataset...")
-                # log = subprocess.check_call("./utils/download_placesdataset.sh '%s'" % {self.root}, shell=True)
                 os.system(f"bash {join(self.code_path, 'utils', 'download_placesdataset.sh')} {self.root}")
-                #subprocess.run(f"bash /utils/download_placesdataset.sh {self.root}")
+                # subprocess.run(f"bash /utils/download_placesdataset.sh {self.root}")
+            else:
+                print(f"places2-mit-dataset already downloaded")
 
             for subfolder in sorted(
                     glob(join(self.root, "places2-mit-dataset", "train_256_places365standard", "data_256", "*"))):
                 for subsubfolder in sorted(glob(join(subfolder, "*"))):
                     self.images += sorted(glob(join(subsubfolder, "*")))
-                    self.labels += [subsubfolder.split("/")[-1]]
+                    self.labels += [subsubfolder.split("/")[-1]] * len(glob(join(subsubfolder, "*")))
 
         # --- HANDLE APPAREL DATASET ---
         if 'apparel' in datasets:
             # Download the dataset if not is already downloaded
             if not exists(join(self.root, "apparel-images-dataset")):
-                # run(["bash", f"{join(self.code_path, 'utils', 'download_appareldataset.sh')}", self.root], stdout=PIPE, stderr=PIPE )
                 os.system(f"bash {join(self.code_path, 'utils', 'download_appareldataset.sh')} {self.root}")
             else:
                 print(f"apparel-images-dataset already downloaded")
 
             for subfolder in sorted(glob(join(self.root, "apparel-images-dataset", "*"))):
                 self.images += sorted(glob(join(subfolder, "*")))
-                self.labels += [subfolder.split("/")[-1].split("_")[-1]]
+                self.labels += [subfolder.split("/")[-1].split("_")[-1]] * len(glob(join(subfolder, "*")))
 
         # --- HANDLE OBJECTNET DATASET ---
         # REMINDER: train has to be false as ObjectNet dataset cannot be used for training purposes bc of its licence.
@@ -127,7 +128,6 @@ class TripletGUIE(Dataset):
 
         self.label2positions = {label: np.where(np.asarray(self.labels) == label)[0]
                                 for label in self.labels}
-
         pt = PrettyTable()
         pt.field_names = ['', 'images', 'labels']
         pt.add_row([f"{'train' if train else 'test'} dataset", len(self.images), len(self.labels2idx)])
