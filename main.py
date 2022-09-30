@@ -30,7 +30,7 @@ def main():
     if not os.path.exists(OUTPUT_MODEL_DIR):
         os.makedirs(OUTPUT_MODEL_DIR)
 
-    model = Triplet_CLIP_MLP(clip_model='ViT-B-32', pretrained='openai') # Joan: Fixed triplet model
+    model = Triplet_CLIP_MLP() # Joan: Fixed triplet model
     model.to(device)
 
     train_datasets = cfg.train_datasets

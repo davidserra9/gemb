@@ -12,10 +12,6 @@ def fit(train_loader, test_loader, model, loss_fn, optimizer, scheduler, config,
     n_epochs = config.n_epochs
     model_id = config.model_id
 
-
-    for epoch in range(0, start_epoch):
-        scheduler.step()
-
     for epoch in range(start_epoch, n_epochs):
         scheduler.step()
 
@@ -45,6 +41,7 @@ def fit(train_loader, test_loader, model, loss_fn, optimizer, scheduler, config,
 
 def train_epoch(train_loader, model, loss_fn, optimizer, device, epoch_num):
     model.train()
+    model.to(device)
     loop = tqdm(train_loader, desc=f"EPOCH {epoch_num} TRAIN", leave=True)
     total_loss = 0
     for idx, (data, _) in enumerate(loop):
@@ -102,7 +99,7 @@ class FaissKNeighbors:
         return sum(map) / (len(map) * self.k)
 
 def test_epoch(loader, model, device, epoch_num):
-
+    model.eval()
     model.to(device)
 
     # hard-coded as the challenge stipulates 64 dimensions

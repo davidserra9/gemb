@@ -71,15 +71,23 @@ class TripletGUIE(Dataset):
         apparel: bool (use the apparel-images dataset [2])
         """
 
-        self.root = root
-        self.train = train
-        self.images = []
-        self.labels = []
-        self.label2positions = {}
-        self.label2positions = {}
+        self.root = root            # Dataset root
+        self.train = train          # Whether train mode (True) or test
+        self.images = []            # List of all the images path
+        self.labels = []            # List of the corresponding labels (in strings)
+        self.label2positions = {}   # Dictionary which divides all the images into labels, i,e.
+        # keys: string labels - values: list of ints which are the indices of the images in the self.image varaible
+        # self.label2positions = {"dress": [0,
+        #                                   1,
+        #                                   ...],
+        #                         "bakery": [423343,
+        #                                    843234,
+        #                                    ...]
+        #                         }
+
         self.random_state = np.random.RandomState(29)
         self.transforms = get_training_augmentations() if train else get_validation_augmentations()
-        self.code_path = os.getcwd()
+        self.code_path = os.getcwd() # path in which the code has been run
 
         count = 0
         # --- HANDLE PLACES DATASET ---
@@ -88,8 +96,9 @@ class TripletGUIE(Dataset):
             if not exists(join(self.root, "places2-mit-dataset")):
                 os.system(f"bash {join(self.code_path, 'utils', 'download_placesdataset.sh')} {self.root}")
                 # subprocess.run(f"bash /utils/download_placesdataset.sh {self.root}")
-            else:
-                print(f"places2-mit-dataset already downloaded")
+
+            images_num = sum([len(glob(join(path, "*.jpg"))) for path, _, _ in os.walk(join(self.root, "places2-mit-dataset", "train_256_places365standard", "data_256"))])
+            pbar = tqdm(total=images_num, desc="Loading places2-mit-dataset")
 
             for subfolder in sorted(
                     glob(join(self.root, "places2-mit-dataset", "train_256_places365standard", "data_256", "*"))):
@@ -104,14 +113,33 @@ class TripletGUIE(Dataset):
                             self.label2positions[subsubfolder.split("/")[-1]] = list(range(count, count+len(glob(join(subsubfolder, "*jpg")))))
 
                         count += len(glob(join(subsubfolder, "*jpg")))
+                        pbar.update(len(glob(join(subsubfolder, "*jpg"))))
+                    else:
+                        for subsubsubfolder in os.listdir(subsubfolder):
+                            subsubsubfolder = join(subsubfolder, subsubsubfolder)
+                            self.images += sorted(glob(join(subsubsubfolder, "*jpg")))
+                            self.labels += ["_".join(subsubsubfolder.split("/")[-2:])] * len(glob(join(subsubsubfolder, "*jpg")))
+
+                            if "_".join(subsubsubfolder.split("/")[-2:]) in self.label2positions:
+                                self.label2positions["_".join(subsubsubfolder.split("/")[-2:])] += range(count, count + len(
+                                    glob(join(subsubsubfolder, "*jpg"))))
+                            else:
+                                self.label2positions["_".join(subsubsubfolder.split("/")[-2:])] = list(
+                                    range(count, count + len(glob(join(subsubsubfolder, "*jpg")))))
+
+                            count += len(glob(join(subsubsubfolder, "*jpg")))
+                            pbar.update(len(glob(join(subsubfolder, "*jpg"))))
+
+            pbar.close()
 
         # --- HANDLE APPAREL DATASET ---
         if 'apparel' in datasets:
             # Download the dataset if not is already downloaded
             if not exists(join(self.root, "apparel-images-dataset")):
                 os.system(f"bash {join(self.code_path, 'utils', 'download_appareldataset.sh')} {self.root}")
-            else:
-                print(f"apparel-images-dataset already downloaded")
+
+            images_num = sum([len(glob(join(path, "*.jpg"))) for path, _, _ in os.walk(join(self.root, "apparel-images-dataset"))])
+            pbar = tqdm(total=images_num, desc="Loading apparel-images-dataset")
 
             for subfolder in sorted(glob(join(self.root, "apparel-images-dataset", "*"))):
                 self.images += sorted(glob(join(subfolder, "*jpg")))
@@ -124,26 +152,55 @@ class TripletGUIE(Dataset):
                         glob(join(subfolder, "*jpg")))))
 
                 count += len(glob(join(subfolder, "*jpg")))
+                pbar.update(len(glob(join(subfolder, "*jpg"))))
+            pbar.close()
 
         # --- HANDLE ALIBABA DATASET ---
         if 'alibaba' in datasets:
             if not exists(join(self.root, "alibaba-goods-dataset")):
                 os.system(f"bash {join(self.code_path, 'utils', 'download_alibabadataset.sh')} {self.root}")
-            else:
-                print(f"alibaba-goods-dataset already downloaded")
 
-        for subfolder in sorted(glob(join(self.root, "alibaba-goods-dataset", "goods_categories", "*"))):
-            self.images += sorted(glob(join(subfolder, "*jpg")))
-            self.labels += [subfolder.split("/")[-1]] * len(glob(join(subfolder, "*jpg")))
+            images_num = sum([len(glob(join(path, "*.jpg"))) for path, _, _ in os.walk(join(self.root, "alibaba-goods-dataset", "goods_categories"))])
+            pbar = tqdm(total=images_num, desc="Loading alibaba-goods-dataset")
 
-            if subfolder.split("/")[-1] in self.label2positions:
-                self.label2positions[subfolder.split("/")[-1]] += range(count, count + len(
-                    glob(join(subfolder, "*jpg"))))
-            else:
-                self.label2positions[subfolder.split("/")[-1]] = list(range(count, count + len(
-                    glob(join(subfolder, "*jpg")))))
+            for subfolder in sorted(glob(join(self.root, "alibaba-goods-dataset", "goods_categories", "*"))):
+                self.images += sorted(glob(join(subfolder, "*jpg")))
+                self.labels += [subfolder.split("/")[-1]] * len(glob(join(subfolder, "*jpg")))
 
-            count += len(glob(join(subfolder, "*jpg")))
+                if subfolder.split("/")[-1] in self.label2positions:
+                    self.label2positions[subfolder.split("/")[-1]] += range(count, count + len(
+                        glob(join(subfolder, "*jpg"))))
+                else:
+                    self.label2positions[subfolder.split("/")[-1]] = list(range(count, count + len(
+                        glob(join(subfolder, "*jpg")))))
+
+                count += len(glob(join(subfolder, "*jpg")))
+                pbar.update(len(glob(join(subfolder, "*jpg"))))
+            pbar.close()
+
+        # --- HANDLE ARTWORKS DATASET ---
+        if 'artworks' in datasets:
+            if not exists(join(self.root, "best-artworks-of-all-time")):
+                os.system(f"bash {join(self.code_path, 'utils', 'download-artworksdataset.sh')} {self.root}")
+
+            images_num = sum([len(glob(join(path, "*.jpg"))) for path, _, _ in
+                              os.walk(join(self.root, "best-artworks-of-all-time", "images"))])
+            pbar = tqdm(total=images_num, desc="Loading artworks-dataset")
+
+            for subfolder in sorted(glob(join(self.root, "best-artworks-of-all-time", "images", "images", "*"))):
+                self.images += sorted(glob(join(subfolder, "*jpg")))
+                self.labels += [subfolder.split("/")[-1]] * len(glob(join(subfolder, "*jpg")))
+
+                if subfolder.split("/")[-1] in self.label2positions:
+                    self.label2positions[subfolder.split("/")[-1]] += range(count, count + len(
+                        glob(join(subfolder, "*jpg"))))
+                else:
+                    self.label2positions[subfolder.split("/")[-1]] = list(range(count, count + len(
+                        glob(join(subfolder, "*jpg")))))
+
+                count += len(glob(join(subfolder, "*jpg")))
+                pbar.update(len(glob(join(subfolder, "*jpg"))))
+            pbar.close()
 
         # --- HANDLE OBJECTNET DATASET ---
         # REMINDER: train has to be false as ObjectNet dataset cannot be used for training purposes bc of its licence.
@@ -152,13 +209,17 @@ class TripletGUIE(Dataset):
                 os.makedirs(join(self.root, "objectnet"), exist_ok=True)
                 os.system(f"bash {join(self.code_path, 'utils', 'download_objectnet.sh')} {join(self.root, 'objectnet')}")
 
-            else:
-                print(f"objectnet dataset already downloaded")
+            images_num = sum([len(glob(join(path, "*.png"))) for path, _, _ in
+                              os.walk(join(self.root, "objectnet"))])
+            pbar = tqdm(total=images_num, desc="Loading objectnet")
 
             for split_folder in sorted(glob(join(self.root, "objectnet", "*"))):
                 for class_folder in sorted(glob(join(split_folder, "*", "images", "*"))):
                     self.images += sorted(glob(join(class_folder, "*")))
                     self.labels += [class_folder.split("/")[-1]] * len(glob(join(class_folder, "*")))
+
+                    pbar.update(len(glob(join(class_folder, "*"))))
+            pbar.close()
 
         self.labels2idx = {}
         for idx, label in enumerate(np.unique(self.labels)):
