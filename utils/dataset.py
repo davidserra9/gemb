@@ -5,6 +5,7 @@
 import os
 import cv2
 from glob import glob
+from tqdm import tqdm
 from os.path import exists, join
 from subprocess import run, PIPE
 import numpy as np
@@ -75,11 +76,12 @@ class TripletGUIE(Dataset):
         self.images = []
         self.labels = []
         self.label2positions = {}
+        self.label2positions = {}
         self.random_state = np.random.RandomState(29)
         self.transforms = get_training_augmentations() if train else get_validation_augmentations()
         self.code_path = os.getcwd()
 
-        id = 0
+        count = 0
         # --- HANDLE PLACES DATASET ---
         if 'places' in datasets:
             # Download the dataset if not is already downloaded
@@ -92,8 +94,16 @@ class TripletGUIE(Dataset):
             for subfolder in sorted(
                     glob(join(self.root, "places2-mit-dataset", "train_256_places365standard", "data_256", "*"))):
                 for subsubfolder in sorted(glob(join(subfolder, "*"))):
-                    self.images += sorted(glob(join(subsubfolder, "*")))
-                    self.labels += [subsubfolder.split("/")[-1]] * len(glob(join(subsubfolder, "*")))
+                    if len(sorted(glob(join(subsubfolder, "*jpg")))) > 0:
+                        self.images += sorted(glob(join(subsubfolder, "*jpg")))
+                        self.labels += [subsubfolder.split("/")[-1]] * len(glob(join(subsubfolder, "*jpg")))
+
+                        if subsubfolder.split("/")[-1] in self.label2positions:
+                            self.label2positions[subsubfolder.split("/")[-1]] += range(count, count+len(glob(join(subsubfolder, "*jpg"))))
+                        else:
+                            self.label2positions[subsubfolder.split("/")[-1]] = list(range(count, count+len(glob(join(subsubfolder, "*jpg")))))
+
+                        count += len(glob(join(subsubfolder, "*jpg")))
 
         # --- HANDLE APPAREL DATASET ---
         if 'apparel' in datasets:
@@ -104,8 +114,36 @@ class TripletGUIE(Dataset):
                 print(f"apparel-images-dataset already downloaded")
 
             for subfolder in sorted(glob(join(self.root, "apparel-images-dataset", "*"))):
-                self.images += sorted(glob(join(subfolder, "*")))
-                self.labels += [subfolder.split("/")[-1].split("_")[-1]] * len(glob(join(subfolder, "*")))
+                self.images += sorted(glob(join(subfolder, "*jpg")))
+                self.labels += [subfolder.split("/")[-1].split("_")[-1]] * len(glob(join(subfolder, "*jpg")))
+
+                if subfolder.split("/")[-1].split("_")[-1] in self.label2positions:
+                    self.label2positions[subfolder.split("/")[-1].split("_")[-1]] += range(count, count + len(glob(join(subfolder, "*jpg"))))
+                else:
+                    self.label2positions[subfolder.split("/")[-1].split("_")[-1]] = list(range(count, count + len(
+                        glob(join(subfolder, "*jpg")))))
+
+                count += len(glob(join(subfolder, "*jpg")))
+
+        # --- HANDLE ALIBABA DATASET ---
+        if 'alibaba' in datasets:
+            if not exists(join(self.root, "alibaba-goods-dataset")):
+                os.system(f"bash {join(self.code_path, 'utils', 'download_alibabadataset.sh')} {self.root}")
+            else:
+                print(f"alibaba-goods-dataset already downloaded")
+
+        for subfolder in sorted(glob(join(self.root, "alibaba-goods-dataset", "goods_categories", "*"))):
+            self.images += sorted(glob(join(subfolder, "*jpg")))
+            self.labels += [subfolder.split("/")[-1]] * len(glob(join(subfolder, "*jpg")))
+
+            if subfolder.split("/")[-1] in self.label2positions:
+                self.label2positions[subfolder.split("/")[-1]] += range(count, count + len(
+                    glob(join(subfolder, "*jpg"))))
+            else:
+                self.label2positions[subfolder.split("/")[-1]] = list(range(count, count + len(
+                    glob(join(subfolder, "*jpg")))))
+
+            count += len(glob(join(subfolder, "*jpg")))
 
         # --- HANDLE OBJECTNET DATASET ---
         # REMINDER: train has to be false as ObjectNet dataset cannot be used for training purposes bc of its licence.
@@ -126,8 +164,6 @@ class TripletGUIE(Dataset):
         for idx, label in enumerate(np.unique(self.labels)):
             self.labels2idx[label] = idx
 
-        self.label2positions = {label: np.where(np.asarray(self.labels) == label)[0]
-                                for label in self.labels}
         pt = PrettyTable()
         pt.field_names = ['', 'images', 'labels']
         pt.add_row([f"{'train' if train else 'test'} dataset", len(self.images), len(self.labels2idx)])
@@ -148,7 +184,7 @@ class TripletGUIE(Dataset):
         if self.train:
             anchor_image, anchor_label = self.images[index], self.labels2idx[self.labels[index]]
 
-            positive_image = self.images[np.random.choice(self.label2positions[self.labels[anchor_label]])]
+            positive_image = self.images[np.random.choice(self.label2positions[self.labels[index]])]
             positive_label = anchor_label
 
             negative_pos = np.random.choice(self.label2positions[np.random.choice(list(set(self.labels) - {anchor_label}))])
