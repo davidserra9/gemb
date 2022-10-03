@@ -73,17 +73,24 @@ class TripletGUIE(Dataset):
 
         self.root = root            # Dataset root
         self.train = train          # Whether train mode (True) or test
-        self.images = []            # List of all the images path
-        self.labels = []            # List of the corresponding labels (in strings)
+        self.images = []            # List of all the images path   ['path/to/image', 'path/to/image', ...]
+        self.source = []            # List of the corresponding dataset (in strings)    ['apparel', 'places', ...]
+        self.labels = []            # List of the corresponding labels (in strings)     ['church', 'black_dress', ...]
         self.label2positions = {}   # Dictionary which divides all the images into labels, i,e.
-        # keys: string labels - values: list of ints which are the indices of the images in the self.image varaible
-        # self.label2positions = {"dress": [0,
-        #                                   1,
-        #                                   ...],
-        #                         "bakery": [423343,
-        #                                    843234,
-        #                                    ...]
-        #                         }
+        # keys: dataset source
+        # values: dictionary with labels as keys and list of image paths as values
+        # self.label2positions = {"places": {"church": [1,
+        #                                               2,
+        #                                               ...],
+        #                                   {"basketball_court": [34,
+        #                                                         35,
+        #                                                         ...],
+        #                                    ...},
+        #                         "apparel": {"black_dress: [34523,
+        #                                                    34524,
+        #                                                    ...],
+        #                                     ..."}
+        #                          ...}
 
         self.random_state = np.random.RandomState(29)
         self.transforms = get_training_augmentations() if train else get_validation_augmentations()
@@ -97,6 +104,9 @@ class TripletGUIE(Dataset):
                 os.system(f"bash {join(self.code_path, 'utils', 'download_placesdataset.sh')} {self.root}")
                 # subprocess.run(f"bash /utils/download_placesdataset.sh {self.root}")
 
+            # Create dictionary for the places dataset
+            self.label2positions['places'] = {}
+
             images_num = sum([len(glob(join(path, "*.jpg"))) for path, _, _ in os.walk(join(self.root, "places2-mit-dataset", "train_256_places365standard", "data_256"))])
             pbar = tqdm(total=images_num, desc="Loading places2-mit-dataset")
 
@@ -104,32 +114,17 @@ class TripletGUIE(Dataset):
                     glob(join(self.root, "places2-mit-dataset", "train_256_places365standard", "data_256", "*"))):
                 for subsubfolder in sorted(glob(join(subfolder, "*"))):
                     if len(sorted(glob(join(subsubfolder, "*jpg")))) > 0:
-                        self.images += sorted(glob(join(subsubfolder, "*jpg")))
-                        self.labels += [subsubfolder.split("/")[-1]] * len(glob(join(subsubfolder, "*jpg")))
+                        self.images += sorted(glob(join(subsubfolder, "*jpg")))[:500]
+                        self.labels += [subsubfolder.split("/")[-1]] * len(glob(join(subsubfolder, "*jpg"))[:500])
+                        self.source += ['places'] * len(glob(join(subsubfolder, "*jpg"))[:500])
 
-                        if subsubfolder.split("/")[-1] in self.label2positions:
-                            self.label2positions[subsubfolder.split("/")[-1]] += range(count, count+len(glob(join(subsubfolder, "*jpg"))))
+                        if subsubfolder.split("/")[-1] in self.label2positions['places']:
+                            self.label2positions['places'][subsubfolder.split("/")[-1]] += range(count, count+len(glob(join(subsubfolder, "*jpg"))))[:500]
                         else:
-                            self.label2positions[subsubfolder.split("/")[-1]] = list(range(count, count+len(glob(join(subsubfolder, "*jpg")))))
+                            self.label2positions['places'][subsubfolder.split("/")[-1]] = list(range(count, count+len(glob(join(subsubfolder, "*jpg")))))[:500]
 
-                        count += len(glob(join(subsubfolder, "*jpg")))
+                        count += len(glob(join(subsubfolder, "*jpg"))[:500])
                         pbar.update(len(glob(join(subsubfolder, "*jpg"))))
-                    else:
-                        for subsubsubfolder in os.listdir(subsubfolder):
-                            subsubsubfolder = join(subsubfolder, subsubsubfolder)
-                            self.images += sorted(glob(join(subsubsubfolder, "*jpg")))
-                            self.labels += ["_".join(subsubsubfolder.split("/")[-2:])] * len(glob(join(subsubsubfolder, "*jpg")))
-
-                            if "_".join(subsubsubfolder.split("/")[-2:]) in self.label2positions:
-                                self.label2positions["_".join(subsubsubfolder.split("/")[-2:])] += range(count, count + len(
-                                    glob(join(subsubsubfolder, "*jpg"))))
-                            else:
-                                self.label2positions["_".join(subsubsubfolder.split("/")[-2:])] = list(
-                                    range(count, count + len(glob(join(subsubsubfolder, "*jpg")))))
-
-                            count += len(glob(join(subsubsubfolder, "*jpg")))
-                            pbar.update(len(glob(join(subsubfolder, "*jpg"))))
-
             pbar.close()
 
         # --- HANDLE APPAREL DATASET ---
@@ -138,17 +133,21 @@ class TripletGUIE(Dataset):
             if not exists(join(self.root, "apparel-images-dataset")):
                 os.system(f"bash {join(self.code_path, 'utils', 'download_appareldataset.sh')} {self.root}")
 
+            # Create dictionary for the apparel dataset
+            self.label2positions['apparel'] = {}
+
             images_num = sum([len(glob(join(path, "*.jpg"))) for path, _, _ in os.walk(join(self.root, "apparel-images-dataset"))])
             pbar = tqdm(total=images_num, desc="Loading apparel-images-dataset")
 
             for subfolder in sorted(glob(join(self.root, "apparel-images-dataset", "*"))):
                 self.images += sorted(glob(join(subfolder, "*jpg")))
-                self.labels += [subfolder.split("/")[-1].split("_")[-1]] * len(glob(join(subfolder, "*jpg")))
+                self.labels += [subfolder.split("/")[-1]] * len(glob(join(subfolder, "*jpg")))
+                self.source += ['apparel'] * len(glob(join(subfolder, "*jpg")))
 
-                if subfolder.split("/")[-1].split("_")[-1] in self.label2positions:
-                    self.label2positions[subfolder.split("/")[-1].split("_")[-1]] += range(count, count + len(glob(join(subfolder, "*jpg"))))
+                if subfolder.split("/")[-1] in self.label2positions['apparel']:
+                    self.label2positions['apparel'][subfolder.split("/")[-1]] += range(count, count + len(glob(join(subfolder, "*jpg"))))
                 else:
-                    self.label2positions[subfolder.split("/")[-1].split("_")[-1]] = list(range(count, count + len(
+                    self.label2positions['apparel'][subfolder.split("/")[-1]] = list(range(count, count + len(
                         glob(join(subfolder, "*jpg")))))
 
                 count += len(glob(join(subfolder, "*jpg")))
@@ -160,18 +159,22 @@ class TripletGUIE(Dataset):
             if not exists(join(self.root, "alibaba-goods-dataset")):
                 os.system(f"bash {join(self.code_path, 'utils', 'download_alibabadataset.sh')} {self.root}")
 
+            # Create dictionary for the alibaba dataset
+            self.label2positions['alibaba'] = {}
+
             images_num = sum([len(glob(join(path, "*.jpg"))) for path, _, _ in os.walk(join(self.root, "alibaba-goods-dataset", "goods_categories"))])
             pbar = tqdm(total=images_num, desc="Loading alibaba-goods-dataset")
 
             for subfolder in sorted(glob(join(self.root, "alibaba-goods-dataset", "goods_categories", "*"))):
                 self.images += sorted(glob(join(subfolder, "*jpg")))
                 self.labels += [subfolder.split("/")[-1]] * len(glob(join(subfolder, "*jpg")))
+                self.source += ['alibaba'] * len(glob(join(subfolder, "*jpg")))
 
-                if subfolder.split("/")[-1] in self.label2positions:
-                    self.label2positions[subfolder.split("/")[-1]] += range(count, count + len(
+                if subfolder.split("/")[-1] in self.label2positions['alibaba']:
+                    self.label2positions['alibaba'][subfolder.split("/")[-1]] += range(count, count + len(
                         glob(join(subfolder, "*jpg"))))
                 else:
-                    self.label2positions[subfolder.split("/")[-1]] = list(range(count, count + len(
+                    self.label2positions['alibaba'][subfolder.split("/")[-1]] = list(range(count, count + len(
                         glob(join(subfolder, "*jpg")))))
 
                 count += len(glob(join(subfolder, "*jpg")))
@@ -183,6 +186,9 @@ class TripletGUIE(Dataset):
             if not exists(join(self.root, "best-artworks-of-all-time")):
                 os.system(f"bash {join(self.code_path, 'utils', 'download-artworksdataset.sh')} {self.root}")
 
+            # Create dictionary for the alibaba dataset
+            self.label2positions['artworks'] = {}
+
             images_num = sum([len(glob(join(path, "*.jpg"))) for path, _, _ in
                               os.walk(join(self.root, "best-artworks-of-all-time", "images"))])
             pbar = tqdm(total=images_num, desc="Loading artworks-dataset")
@@ -190,12 +196,13 @@ class TripletGUIE(Dataset):
             for subfolder in sorted(glob(join(self.root, "best-artworks-of-all-time", "images", "images", "*"))):
                 self.images += sorted(glob(join(subfolder, "*jpg")))
                 self.labels += [subfolder.split("/")[-1]] * len(glob(join(subfolder, "*jpg")))
+                self.source += ['artworks'] * len(glob(join(subfolder, "*jpg")))
 
-                if subfolder.split("/")[-1] in self.label2positions:
-                    self.label2positions[subfolder.split("/")[-1]] += range(count, count + len(
+                if subfolder.split("/")[-1] in self.label2positions['artworks']:
+                    self.label2positions['artworks'][subfolder.split("/")[-1]] += range(count, count + len(
                         glob(join(subfolder, "*jpg"))))
                 else:
-                    self.label2positions[subfolder.split("/")[-1]] = list(range(count, count + len(
+                    self.label2positions['artworks'][subfolder.split("/")[-1]] = list(range(count, count + len(
                         glob(join(subfolder, "*jpg")))))
 
                 count += len(glob(join(subfolder, "*jpg")))
@@ -209,6 +216,9 @@ class TripletGUIE(Dataset):
                 os.makedirs(join(self.root, "objectnet"), exist_ok=True)
                 os.system(f"bash {join(self.code_path, 'utils', 'download_objectnet.sh')} {join(self.root, 'objectnet')}")
 
+            # Create dictionary for the alibaba dataset
+            self.label2positions['objectnet'] = {}
+
             images_num = sum([len(glob(join(path, "*.png"))) for path, _, _ in
                               os.walk(join(self.root, "objectnet"))])
             pbar = tqdm(total=images_num, desc="Loading objectnet")
@@ -217,6 +227,7 @@ class TripletGUIE(Dataset):
                 for class_folder in sorted(glob(join(split_folder, "*", "images", "*"))):
                     self.images += sorted(glob(join(class_folder, "*")))
                     self.labels += [class_folder.split("/")[-1]] * len(glob(join(class_folder, "*")))
+                    self.source += ['objectnet'] * len(glob(join(class_folder, "*")))
 
                     pbar.update(len(glob(join(class_folder, "*"))))
             pbar.close()
@@ -243,14 +254,15 @@ class TripletGUIE(Dataset):
 
     def __getitem__(self, index):
         if self.train:
-            anchor_image, anchor_label = self.images[index], self.labels2idx[self.labels[index]]
+            #
+            anchor_image, anchor_label, anchor_source = self.images[index], self.labels[index], self.source[index]
 
-            positive_image = self.images[np.random.choice(self.label2positions[self.labels[index]])]
+            positive_positions = self.label2positions[anchor_source][anchor_label]
+            positive_image = self.images[np.random.choice(positive_positions)]
             positive_label = anchor_label
 
-            negative_pos = np.random.choice(self.label2positions[np.random.choice(list(set(self.labels) - {anchor_label}))])
-            negative_image = self.images[negative_pos]
-            negative_label = self.labels2idx[self.labels[negative_pos]]
+            negative_label = np.random.choice(list(set(self.label2positions[anchor_source].keys()) - {anchor_label}))
+            negative_image = self.images[np.random.choice(self.label2positions[anchor_source][negative_label])]
 
             anchor_image = self.transforms(image=cv2.imread(anchor_image)[:,:,::-1])['image']
             positive_image = self.transforms(image=cv2.imread(positive_image)[:,:,::-1])['image']

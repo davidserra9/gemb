@@ -16,7 +16,7 @@ def fit(train_loader, test_loader, model, loss_fn, optimizer, scheduler, config,
         scheduler.step()
 
         # Train stage
-        train_loss, metrics = train_epoch(train_loader, model, loss_fn, optimizer, device, epoch)
+        train_loss, metrics = train_epoch(train_loader, test_loader, model, loss_fn, optimizer, device, epoch)
 
         # print('Epoch: {}/{}. Train set: Average loss: {:.4f}'.format(epoch + 1, n_epochs, train_loss))
 
@@ -39,12 +39,25 @@ def fit(train_loader, test_loader, model, loss_fn, optimizer, scheduler, config,
         PATH = 'models/' + model_id + '.pth'
         torch.save(state_dict, PATH)
 
-def train_epoch(train_loader, model, loss_fn, optimizer, device, epoch_num):
+def train_epoch(train_loader, test_loader, model, loss_fn, optimizer, device, epoch_num):
     model.train()
     model.to(device)
     loop = tqdm(train_loader, desc=f"EPOCH {epoch_num} TRAIN", leave=True)
     total_loss = 0
     for idx, (data, _) in enumerate(loop):
+
+        if len(loop) > 5000 and (idx % 2000 == 1000):
+            test_epoch(test_loader, model, device, epoch_num)
+            state_dict = {
+                'epoch': epoch_num + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+            }
+
+            PATH = 'models/' + f'{idx}/{len(loop)}-{epoch_num}' + '.pth'
+            torch.save(state_dict, PATH)
+            model.train()
+
         data = tuple(d.to(device) for d in data)
 
         optimizer.zero_grad()
@@ -72,8 +85,45 @@ def train_epoch(train_loader, model, loss_fn, optimizer, device, epoch_num):
         #     wandb.log(log)
         loop.set_postfix(loss=total_loss / (idx+1))
 
-    metrics = {}  
+    metrics = {}
     return total_loss, metrics
+
+# def train_epoch(train_loader, model, loss_fn, optimizer, device, epoch_num):
+#     model.train()
+#     model.to(device)
+#     loop = tqdm(train_loader, desc=f"EPOCH {epoch_num} TRAIN", leave=True)
+#     total_loss = 0
+#     for idx, (data, _) in enumerate(loop):
+#
+#         data = tuple(d.to(device) for d in data)
+#
+#         optimizer.zero_grad()
+#         outputs = model(*data)
+#
+#         outputs = (outputs,) if type(outputs) not in (tuple, list) else outputs
+#
+#         loss = loss_fn(*outputs)
+#         loss = loss[0] if type(loss) in (tuple, list) else loss
+#         total_loss += loss.item()
+#         loss.backward()
+#         optimizer.step()
+#
+#         log = {}
+#
+#         # if idx % 10 == 0:
+#         #     print(epoch_num, idx, f'loss - {loss.item()}')
+#         #
+#         #     log = {
+#         #         **log,
+#         #         'epoch': epoch_num,
+#         #         'iter': idx,
+#         #         'train_loss': loss.item()
+#         #     }
+#         #     wandb.log(log)
+#         loop.set_postfix(loss=total_loss / (idx+1))
+#
+#     metrics = {}
+#     return total_loss, metrics
 
 
 class FaissKNeighbors:
@@ -106,9 +156,9 @@ def test_epoch(loader, model, device, epoch_num):
     test_embeddings = np.empty((0, 64))
     test_labels = np.empty((0))
 
-    loop = tqdm(loader, desc=f"EPOCH {epoch_num}  TEST", leave=True)
+    # loop = tqdm(loader, desc=f"EPOCH {epoch_num}  TEST", leave=True)
     with torch.no_grad():
-        for idx, (data, target) in enumerate(loop):
+        for idx, (data, target) in enumerate(loader):
             data = data.to(device)
 
             outputs = model.embedding(data)
