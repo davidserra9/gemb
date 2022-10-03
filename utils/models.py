@@ -18,7 +18,7 @@ class Shared_CLIP_MLP(nn.Module):
             param.requires_grad = False
 
         self.mlp = nn.Sequential(
-            nn.Linear(512, 256),
+            nn.Linear(1024, 256),
             nn.ReLU(),
             nn.Linear(256, 128),
             nn.ReLU(),
