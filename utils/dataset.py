@@ -17,7 +17,7 @@ from albumentations.pytorch import ToTensorV2
 from prettytable import PrettyTable
 from utils.dataset_filter import *
 
-def get_training_augmentations():
+def get_training_augmentations_old():
     """ Function defining and returning the training augmentations.
     Returns
     -------
@@ -39,6 +39,16 @@ def get_training_augmentations():
         A.Normalize(mean=[0.485, 0.456, 0.406],
                     std=[0.229, 0.224, 0.225]),
         A.Resize(224, 224),
+        ToTensorV2(),
+    ]
+    return A.Compose(train_transform)
+
+def get_training_augmentations():
+    train_transform = [
+        A.SmallestMaxSize(224),
+        A.CenterCrop(224, 224),
+        A.Normalize(mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]),
         ToTensorV2(),
     ]
     return A.Compose(train_transform)
@@ -264,9 +274,13 @@ class TripletGUIE(Dataset):
             negative_label = np.random.choice(list(set(self.label2positions[anchor_source].keys()) - {anchor_label}))
             negative_image = self.images[np.random.choice(self.label2positions[anchor_source][negative_label])]
 
-            anchor_image = self.transforms(image=cv2.imread(anchor_image)[:,:,::-1])['image']
-            positive_image = self.transforms(image=cv2.imread(positive_image)[:,:,::-1])['image']
-            negative_image = self.transforms(image=cv2.imread(negative_image)[:,:,::-1])['image']
+            anchor_image = self.transforms(image=cv2.imread(anchor_image)[:, :, ::-1])['image']
+            positive_image = self.transforms(image=cv2.imread(positive_image)[:, :, ::-1])['image']
+            negative_image = self.transforms(image=cv2.imread(negative_image)[:, :, ::-1])['image']
+
+            # anchor_image = self.transforms(image=cv2.imread(anchor_image)[:,:,::-1])['image']
+            # positive_image = self.transforms(image=cv2.imread(positive_image)[:,:,::-1])['image']
+            # negative_image = self.transforms(image=cv2.imread(negative_image)[:,:,::-1])['image']
 
             return (anchor_image, positive_image, negative_image), (anchor_label, positive_label, negative_label)
 
@@ -285,7 +299,7 @@ class TripletGUIE(Dataset):
 
             image = self.transforms(image=cv2.imread(self.images[index])[:, :, ::-1])['image']
             label = self.labels2idx[self.labels[index]]
-            return image, label
+            return image, label, self.images[index]
 
         # Joan: TODO:Perform here the transform
 

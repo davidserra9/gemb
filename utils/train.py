@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import wandb
 from tqdm import tqdm
+from PIL import Image
 import faiss
 from scipy import stats
 
@@ -13,10 +14,9 @@ def fit(train_loader, test_loader, model, loss_fn, optimizer, scheduler, config,
     model_id = config.model_id
 
     for epoch in range(start_epoch, n_epochs):
-        scheduler.step()
-
         # Train stage
-        train_loss, metrics = train_epoch(train_loader, test_loader, model, loss_fn, optimizer, device, epoch)
+        train_loss, metrics = train_epoch(train_loader, test_loader, model, loss_fn, optimizer, device, epoch, model_id)
+        scheduler.step()
 
         # print('Epoch: {}/{}. Train set: Average loss: {:.4f}'.format(epoch + 1, n_epochs, train_loss))
 
@@ -39,22 +39,25 @@ def fit(train_loader, test_loader, model, loss_fn, optimizer, scheduler, config,
         PATH = 'models/' + model_id + '.pth'
         torch.save(state_dict, PATH)
 
-def train_epoch(train_loader, test_loader, model, loss_fn, optimizer, device, epoch_num):
+def train_epoch(train_loader, test_loader, model, loss_fn, optimizer, device, epoch_num, model_id):
     model.train()
     model.to(device)
     loop = tqdm(train_loader, desc=f"EPOCH {epoch_num} TRAIN", leave=True)
     total_loss = 0
+    map = -1
     for idx, (data, _) in enumerate(loop):
 
-        if len(loop) > 5000 and (idx % 2000 == 1000):
-            test_epoch(test_loader, model, device, epoch_num)
+        if len(loop) > 2000 and (idx % 1000 == 0):
+            map = test_epoch(test_loader, model, device, epoch_num)
             state_dict = {
                 'epoch': epoch_num + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
             }
 
-            PATH = 'models/' + f'{idx}/{len(loop)}-{epoch_num}' + '.pth'
+            wandb.log({'map': map})
+
+            PATH = f'models/{model_id}' + '.pth'
             torch.save(state_dict, PATH)
             model.train()
 
@@ -73,58 +76,18 @@ def train_epoch(train_loader, test_loader, model, loss_fn, optimizer, device, ep
 
         log = {}
 
-        # if idx % 10 == 0:
-        #     print(epoch_num, idx, f'loss - {loss.item()}')
-        #
-        #     log = {
-        #         **log,
-        #         'epoch': epoch_num,
-        #         'iter': idx,
-        #         'train_loss': loss.item()
-        #     }
-        #     wandb.log(log)
-        loop.set_postfix(loss=total_loss / (idx+1))
+        if idx % 10 == 0:
+            log = {
+                **log,
+                'epoch': epoch_num,
+                'iter': idx,
+                'train_loss': loss.item(),
+            }
+            wandb.log(log)
+        loop.set_postfix(loss=total_loss / (idx+1), map=round(map, 4))
 
     metrics = {}
     return total_loss, metrics
-
-# def train_epoch(train_loader, model, loss_fn, optimizer, device, epoch_num):
-#     model.train()
-#     model.to(device)
-#     loop = tqdm(train_loader, desc=f"EPOCH {epoch_num} TRAIN", leave=True)
-#     total_loss = 0
-#     for idx, (data, _) in enumerate(loop):
-#
-#         data = tuple(d.to(device) for d in data)
-#
-#         optimizer.zero_grad()
-#         outputs = model(*data)
-#
-#         outputs = (outputs,) if type(outputs) not in (tuple, list) else outputs
-#
-#         loss = loss_fn(*outputs)
-#         loss = loss[0] if type(loss) in (tuple, list) else loss
-#         total_loss += loss.item()
-#         loss.backward()
-#         optimizer.step()
-#
-#         log = {}
-#
-#         # if idx % 10 == 0:
-#         #     print(epoch_num, idx, f'loss - {loss.item()}')
-#         #
-#         #     log = {
-#         #         **log,
-#         #         'epoch': epoch_num,
-#         #         'iter': idx,
-#         #         'train_loss': loss.item()
-#         #     }
-#         #     wandb.log(log)
-#         loop.set_postfix(loss=total_loss / (idx+1))
-#
-#     metrics = {}
-#     return total_loss, metrics
-
 
 class FaissKNeighbors:
     def __init__(self, k=5):
@@ -155,18 +118,28 @@ def test_epoch(loader, model, device, epoch_num):
     # hard-coded as the challenge stipulates 64 dimensions
     test_embeddings = np.empty((0, 64))
     test_labels = np.empty((0))
+    path_list = []
 
     # loop = tqdm(loader, desc=f"EPOCH {epoch_num}  TEST", leave=True)
     with torch.no_grad():
-        for idx, (data, target) in enumerate(loader):
+        for idx, (data, target, path) in enumerate(loader):
             data = data.to(device)
 
             outputs = model.embedding(data)
             test_embeddings = np.vstack((test_embeddings, outputs.cpu().detach().numpy()))
             test_labels = np.concatenate((test_labels, target.numpy()))
+            path_list += list(path)
 
     KNN = FaissKNeighbors(k=5)
     KNN.fit(X=test_embeddings, y=test_labels)
-    KNN.predict(X=test_embeddings)
+    pred = KNN.predict(X=test_embeddings)
     map = KNN.mapk()
-    print(f"map@5: {map}")
+
+    img = Image.open(path_list[0]).resize((224, 224))
+    wandb.log({"query": wandb.Image(img)})
+
+    ret = pred[0,:]
+    ret_path = [path_list[int(p)] for p in ret]
+    wandb.log({"retrievals": [wandb.Image(Image.open(p).resize((224, 224))) for p in ret_path]})
+
+    return map

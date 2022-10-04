@@ -51,7 +51,7 @@ def main():
 
     test_loader = DataLoader(test_dataset,
                              batch_size=cfg.batch_size,
-                             shuffle=True,
+                             shuffle=False,
                              num_workers=cfg.num_workers)
 
     criterion = TripletLoss(margin=1.)
@@ -60,12 +60,12 @@ def main():
 
     start_epoch = 0
     # Check if file exists
-    if os.path.exists(OUTPUT_MODEL_DIR + cfg.model_id + '.pth'):
-        print('Loading the model from the disk')
-        checkpoint = torch.load(OUTPUT_MODEL_DIR + cfg.model_id + '.pth')
-        model.load_state_dict(checkpoint['model_state_dict'])
-        opt.load_state_dict(checkpoint['optimizer'])
-        start_epoch = checkpoint['epoch']
+    # if os.path.exists(OUTPUT_MODEL_DIR + cfg.model_id + '.pth'):
+    #     print('Loading the model from the disk')
+    #     checkpoint = torch.load(OUTPUT_MODEL_DIR + cfg.model_id + '.pth')
+    #     model.load_state_dict(checkpoint['model_state_dict'])
+    #     opt.load_state_dict(checkpoint['optimizer'])
+    #     start_epoch = checkpoint['epoch']
         # model.load_state_dict(torch.load(OUTPUT_MODEL_DIR + model_id + '.pth'))
 
     print('Starting training, EPOCH: ', start_epoch)

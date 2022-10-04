@@ -9,16 +9,18 @@ from utils.dataset import TripletGUIE, get_validation_augmentations
 
 
 class Shared_CLIP_MLP(nn.Module):
-    def __init__(self, clip_model='ViT-g-14', pretrained='laion2b_s12b_b42k'):
+    def __init__(self, clip_model='ViT-B-16-plus-240', pretrained='laion400m_e32'):
         super().__init__()
-
         self.backbone_clip, _, _ = open_clip.create_model_and_transforms(model_name=clip_model,
                                                                          pretrained=pretrained)
+
         for param in self.backbone_clip.parameters():
             param.requires_grad = False
 
         self.mlp = nn.Sequential(
-            nn.Linear(1024, 256),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
             nn.ReLU(),
             nn.Linear(256, 128),
             nn.ReLU(),
@@ -31,7 +33,7 @@ class Shared_CLIP_MLP(nn.Module):
         return x
 
 class Triplet_CLIP_MLP(nn.Module):
-    def __init__(self, clip_model='ViT-g-14', pretrained='laion2b_s12b_b42k'):
+    def __init__(self, clip_model='ViT-H-14', pretrained='laion2b_s32b_b79k'):
         super().__init__()
         self.shared_embedding = Shared_CLIP_MLP(clip_model=clip_model, pretrained=pretrained)
 
